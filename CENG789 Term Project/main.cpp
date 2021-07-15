@@ -241,10 +241,10 @@ void subtractMinimumDistance(Vector<double>& phi)
 
 
 //Couple of notes before solving. As stated in cotan laplacian, discrete
-//Laplacian is the negative of the smooth counterpart for meshes with no boundaries
-//Since we are going to compute Geodesic Distances for Meshes with no boundaries or boundaries
-// whose normals vanishes along the boundary, 
-//For all the equations that Laplace appears we should use negative of it.
+//Laplacian is the negative of the smooth counterpart (It is negated so that it becomes
+// positive semi definite). 
+//So, whenever we replace smooth Laplacian with Discrete counterpart 
+//we should use negate the sign of it.
 
 //Second note is about differential forms. Normally Cotan Laplacian has a
 //1/dualArea term, meaning that it applies a hodge star operation to a integrated
