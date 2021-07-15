@@ -1,6 +1,8 @@
 ﻿#include <iostream>
 #include <vector>
+#include <memory>
 #include <GLFW/glfw3.h>
+
 
 
 #include "geometrycentral/surface/manifold_surface_mesh.h"
@@ -31,8 +33,6 @@ using namespace geometrycentral::surface;
 std::unique_ptr<ManifoldSurfaceMesh> mesh;
 std::unique_ptr<VertexPositionGeometry> geometry;
 
-
-
 //Global Properties for Heat Method
 struct HeatProperties
 {
@@ -42,12 +42,12 @@ struct HeatProperties
 	Eigen::SparseMatrix<double> mass;
 	Eigen::SparseMatrix<double> A;
 	double meanEdgeLength;
-	polyscope::SurfaceVertexColorQuantity* solnColors; //Black to Red
-	polyscope::SurfaceGraphQuantity* isolines;
-	double maxPhi;
 	double vertexRadius;
 	double isolinesRadius;
-	double runtime;
+	double setupTime;
+	double solveTime;
+	std::unique_ptr<PositiveDefiniteSolver<double>> diffusionSolver;
+	std::unique_ptr < PositiveDefiniteSolver<double>> geodesicSolver;
 };
 
 
@@ -262,21 +262,23 @@ Vector<double> computeGeodesics(const Vector<double>& delta)
 	//A : M + t * L
 	//Our Laplacian is positive definite thus we can solve it very fast
 	//Using Cholesky factorization
-	Vector<double> u = solvePositiveDefinite(ht.A, delta);
+	//Vector<double> u = solvePositiveDefinite(ht.A, delta);
+	Vector<double> u = ht.diffusionSolver->solve(delta);
+
 
 	//Secondly, compute the integrated divergence which is the right side of the
 	//Poisson equation. 
 	Vector<double> divergence = computeDivergence(computeGradientField(u));
 
 	//Solve for geodesic distances
-	Eigen::SparseMatrix<double> L(-ht.laplace);
+	//Eigen::SparseMatrix<double> L(-ht.laplace);
 
-	ht.SOLUTION = solvePositiveDefinite(L, divergence);
-
+	//ht.SOLUTION = solvePositiveDefinite(L, divergence);
+	ht.SOLUTION = ht.geodesicSolver->solve(divergence);
 
 	subtractMinimumDistance(ht.SOLUTION);
 
-	ht.runtime = glfwGetTime() - t1;
+	ht.solveTime = glfwGetTime() - t1;
 
 	return ht.SOLUTION; //Returning has no purpose here but yeah
 
@@ -293,8 +295,7 @@ void loadMesh()
 			geometry->inputVertexPositions,
 			mesh->getFaceVertexList(), polyscopePermutations(*mesh));
 
-
-
+	double t1 = glfwGetTime();
 	//Data init
 	ht.laplace = laplaceMatrix();
 	ht.mass = massMatrix();
@@ -305,8 +306,13 @@ void loadMesh()
 	double scale = ht.meanEdgeLength;
 	double timeStep = scale * scale;
 	ht.A = ht.mass + timeStep * ht.laplace;
+	//Factorize and Setup the Solvers
+	ht.diffusionSolver.reset(new PositiveDefiniteSolver<double>(ht.A));
+	//Could not pass -ht.laplace lol
+	SparseMatrix<double> negLaplace(-ht.laplace);
+	ht.geodesicSolver.reset(new PositiveDefiniteSolver<double>(negLaplace));
 
-
+	ht.setupTime = glfwGetTime() - t1;
 	//Polyscope Init
 	showVerts = nullptr;
 	distanceColors = nullptr;
@@ -386,22 +392,21 @@ void callback()
 		}
 	}
 
-	ImGui::Text("Time: %f", ht.runtime);
+	ImGui::Text("Building and Factorizing Time: %f", ht.setupTime);
+	ImGui::Text("Solve Time: %f", ht.solveTime);
 
 }
 
 
 int main()
 {
-	loadMesh();
-
 	polyscope::init();
 	polyscope::state::userCallback = callback;
 
 
 	polyscope::loadColorMap("Hot", "HotColormapFunction.png");
 
-
+	loadMesh();
 
 
 
