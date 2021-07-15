@@ -1,6 +1,6 @@
 ﻿#include <iostream>
 #include <vector>
-
+#include <GLFW/glfw3.h>
 
 
 #include "geometrycentral/surface/manifold_surface_mesh.h"
@@ -32,16 +32,22 @@ std::unique_ptr<ManifoldSurfaceMesh> mesh;
 std::unique_ptr<VertexPositionGeometry> geometry;
 
 
+
 //Global Properties for Heat Method
 struct HeatProperties
 {
 	Vector<double> DELTA; //Kronecker Delta.
 	Vector<double> SOLUTION; //Geodesic Distances
+	Eigen::SparseMatrix<double> laplace;
+	Eigen::SparseMatrix<double> mass;
+	Eigen::SparseMatrix<double> A;
+	double meanEdgeLength;
 	polyscope::SurfaceVertexColorQuantity* solnColors; //Black to Red
 	polyscope::SurfaceGraphQuantity* isolines;
 	double maxPhi;
 	double vertexRadius;
 	double isolinesRadius;
+	double runtime;
 };
 
 
@@ -55,15 +61,14 @@ polyscope::SurfaceVertexScalarQuantity* distanceColors = nullptr;
 
 //ImGui properties
 static const char* meshes[]
-{ 
-	"bunny.obj", 
-	"Armadillo.ply", 
-	"catlowpoly.off", 
+{
+	"bunny.obj",
+	"catlowpoly.off",
 	"centaur.off",
 	"lowresdragon.obj",
 	"lucy.obj",
 	"Man.obj",
-	"horse.off"
+	"strawberry.obj"
 };
 static int selectedMesh;
 static int prevMesh;
@@ -161,7 +166,7 @@ Eigen::SparseMatrix<double> massMatrix()
 	}
 
 	spMat.setFromTriplets(triplets.begin(), triplets.end());
-	
+
 	return spMat;
 }
 
@@ -251,33 +256,27 @@ void subtractMinimumDistance(Vector<double>& phi)
 //Delta is the Kronecker Delta.
 Vector<double> computeGeodesics(const Vector<double>& delta)
 {
-	//Compute short time step which is given in the paper
-	double scale = meanEdgeLength();
-	double timeStep = scale * scale;
-	
+	double t1 = glfwGetTime();
+
 	//First compute the Diffused Heat by solving a Backward Euler equation.
 	//A : M + t * L
-	
-	Eigen::SparseMatrix<double> L = laplaceMatrix();
-	Eigen::SparseMatrix<double> M = massMatrix();
-	Eigen::SparseMatrix<double> A = M + timeStep * L;
-	 
 	//Our Laplacian is positive definite thus we can solve it very fast
 	//Using Cholesky factorization
-	Vector<double> u = solvePositiveDefinite(A, delta);
+	Vector<double> u = solvePositiveDefinite(ht.A, delta);
 
 	//Secondly, compute the integrated divergence which is the right side of the
 	//Poisson equation. 
 	Vector<double> divergence = computeDivergence(computeGradientField(u));
 
-
 	//Solve for geodesic distances
-	L *= -1.0;
+	Eigen::SparseMatrix<double> L(-ht.laplace);
 
 	ht.SOLUTION = solvePositiveDefinite(L, divergence);
-	
+
 
 	subtractMinimumDistance(ht.SOLUTION);
+
+	ht.runtime = glfwGetTime() - t1;
 
 	return ht.SOLUTION; //Returning has no purpose here but yeah
 
@@ -297,8 +296,20 @@ void loadMesh()
 
 
 	//Data init
+	ht.laplace = laplaceMatrix();
+	ht.mass = massMatrix();
+	ht.meanEdgeLength = meanEdgeLength();
 	ht.DELTA = Vector<double>::Zero(mesh->nVertices());
 	ht.SOLUTION = Vector<double>::Zero(mesh->nVertices());
+	//Compute short time step which is given in the paper
+	double scale = ht.meanEdgeLength;
+	double timeStep = scale * scale;
+	ht.A = ht.mass + timeStep * ht.laplace;
+
+
+	//Polyscope Init
+	showVerts = nullptr;
+	distanceColors = nullptr;
 	psMesh->setSurfaceColor({ 1.0, 0.45, 0.0 }); //Orange
 
 	polyscope::requestRedraw();
@@ -314,14 +325,14 @@ void callback()
 		prevMesh = selectedMesh;
 		loadMesh();
 	}
-	
+
 
 	//Could not find a way to process mouse inputs in Polyscope.
 	//Select vertices one by one
 	ImGui::InputInt("New Source", &selectedVertex);
 	if (ImGui::Button("Set Sources"))
 	{
-		if (selectedVertex >= 0)
+		if (selectedVertex >= 0 && selectedVertex < mesh->nVertices())
 		{
 			//Selected vertices are heat sources. Their Kronecker Delta is 1.
 			ht.DELTA[selectedVertex] = 1.0;
@@ -332,10 +343,10 @@ void callback()
 			showVerts = polyscope::getSurfaceMesh("mesh")->addSurfaceGraphQuantity("Heat Sources", sourcePositions, vertInd);
 			showVerts->setEnabled(true);
 			showVerts->setRadius(0.004);
-			showVerts->setColor({1.0, 0.02, 0.02});
+			showVerts->setColor({ 1.0, 0.02, 0.02 });
 
 		}
-		
+
 
 	}
 
@@ -375,6 +386,8 @@ void callback()
 		}
 	}
 
+	ImGui::Text("Time: %f", ht.runtime);
+
 }
 
 
@@ -385,7 +398,7 @@ int main()
 	polyscope::init();
 	polyscope::state::userCallback = callback;
 
-	
+
 	polyscope::loadColorMap("Hot", "HotColormapFunction.png");
 
 
