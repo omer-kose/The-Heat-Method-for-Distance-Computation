@@ -8,8 +8,16 @@ I have implemented the paper "The Heat Method for Distance Computation" on trian
 The paper proposes the heat method for solving the single- or multiple-source shortest path problem on both flat and curved domains. 
 
 It splits the distance computation procedure into two stages: 
-- First find the direction along which distance is increasing by integrating the heat flow for a fixed time and evaluating the vector field.
-- Compute the distance itself by solving a Poisson equation.
+- First find the direction along which distance is increasing by integrating the heat flow for a fixed time and evaluating the vector field
+- Compute the distance itself by solving a Poisson equation
+
+More mathematically:
+- For a small fixed time step let the heat to diffuse along the mesh. This is equivalent to solving a basic Poisson Equation $\Delta u = \delta$ Where $\delta$ is Kronecker Delta
+- After finding the heat diffusion find its gradient $X = \frac{-\nabla u}{|\nabla u|}$
+- Solve the Poisson equation $\Delta \phi = \nabla X$
+
+
+
 
 The method is based on solving a pair of sparse linear systems. Hence, it is easy to implement. Moreover, the sparse systems can be factorized once and
 reused. 
@@ -20,9 +28,18 @@ reused.
 I have used [Geometry Central](https://geometry-central.net/) and [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page) libraries for their data structures, operators, and solvers. For visualization,
 I have used [Polyscope](https://polyscope.run/)
 
+All the heat method related code is in main file.
+
+The steps of computing distances with method can be summarized as:
+- Load the mesh
+- Compute the required operators and matrices
+- Factorize the matrices so that the system can be subsequently solved in near-linear time
+- Find the heat diffusion solving the backward equation
+- Find the gradient and compute the integrated divergence
+- Solve for the geodesics
 
 
-## Benchmarks
+## Benchmarks
 | **Mesh**   | **Number of Triangles** | **Setup Time**        | **Solving Time**       | 
 |---------------|--------------|------------------------|-------------------------------|
 | Cat           | $1k$         | $0.003 s$             | $0.0003s$                      | 
