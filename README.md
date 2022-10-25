@@ -19,3 +19,16 @@ reused.
 
 I have used [Geometry Central](https://geometry-central.net/) and [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page) libraries for their data structures, operators, and solvers. For visualization,
 I have used [Polyscope](https://polyscope.run/)
+
+
+
+## Benchmarks
+| **Mesh**   | **Number of Triangles** | **Setup Time**        | **Solving Time**       | 
+|---------------|--------------|------------------------|-------------------------------|
+| Cat           | $1k$         | $0.003 s$             | $0.0003s$                      | 
+| Man           | $24k$        | $0.05 s$              | $0.01s$                        |
+| Centaur       | $31k$        | $0.06 s$              | $0.01s$                        |
+| Dragon (Simplified)| $64k$   | $0.2 s$               | $0.04s$                        |
+| Bunny         | $69k$        | $0.331 s$             | $0.04s$                        |
+| Lucy          | $100k$       | $0.336 s$             | $0.05s$                        |
+| Strawberry    | $314k$       | $1.67 s$              | $0.13s$                     |
